@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 from database import inicializar_bd, obtener_conexion
+import os
 
 st.set_page_config(
     page_title="Kelly Nails - Gestión Financiera",
@@ -12,9 +13,6 @@ st.set_page_config(
 inicializar_bd()
 
 # Mostrar Logo y Título
-# Reemplazar por:
-import os
-
 col_logo, col_titulo = st.columns([1, 5])
 with col_logo:
     if os.path.exists("logo.png"):
@@ -26,8 +24,10 @@ with col_titulo:
 
 st.markdown("---")
 
-# Menú lateral
-st.sidebar.image("logo.png", use_container_width=True)
+# Menú lateral seguro
+if os.path.exists("logo.png"):
+    st.sidebar.image("logo.png")
+
 opcion = st.sidebar.radio(
     "Navegación",
     ["Registrar Atención", "Historial e Ingresos", "Deudas y Balance General"]
