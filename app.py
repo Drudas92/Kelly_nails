@@ -3,21 +3,27 @@ import pandas as pd
 from datetime import datetime
 from database import inicializar_bd, obtener_conexion
 
-# Configuración de la página
 st.set_page_config(
     page_title="Kelly Nails - Gestión Financiera",
     page_icon="💅",
     layout="wide"
 )
 
-# Inicializar la base de datos
 inicializar_bd()
 
-col_logo, col_titulo = st.columns([1, 4])
+# Mostrar Logo y Título
+# Reemplazar por:
+import os
+
+col_logo, col_titulo = st.columns([1, 5])
 with col_logo:
-    st.image("logo.png", width=100)
+    if os.path.exists("logo.png"):
+        st.image("logo.png", width=100)
+    else:
+        st.write("💅")
 with col_titulo:
     st.title("Gestor Financiero - Kelly Nails")
+
 st.markdown("---")
 
 # Menú lateral
