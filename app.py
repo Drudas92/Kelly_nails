@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from database import inicializar_bd, obtener_conexion
+from streamlit_gsheets import GSheetsConnection
 import os
 
 st.set_page_config(
@@ -10,13 +10,31 @@ st.set_page_config(
     layout="wide"
 )
 
-inicializar_bd()
+# Conexión a Google Sheets
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+# Cargar datos
+def cargar_atenciones():
+    try:
+        df = conn.read(worksheet="atenciones", ttl="0s")
+        return df.dropna(how="all")
+    except Exception:
+        return pd.DataFrame(columns=["id", "fecha", "clienta", "servicio", "monto"])
+
+def cargar_deudas():
+    try:
+        df = conn.read(worksheet="deudas", ttl="0s")
+        return df.dropna(how="all")
+    except Exception:
+        return pd.DataFrame(columns=["id", "acreedor", "monto_total", "cuotas_totales", "cuotas_pagadas", "valor_cuota", "estado"])
 
 # Mostrar Logo y Título
 col_logo, col_titulo = st.columns([1, 5])
 with col_logo:
     if os.path.exists("logo.PNG"):
         st.image("logo.PNG", width=100)
+    elif os.path.exists("logo.png"):
+        st.image("logo.png", width=100)
     else:
         st.write("💅")
 with col_titulo:
@@ -24,9 +42,11 @@ with col_titulo:
 
 st.markdown("---")
 
-# Menú lateral seguro
+# Menú lateral
 if os.path.exists("logo.PNG"):
     st.sidebar.image("logo.PNG")
+elif os.path.exists("logo.png"):
+    st.sidebar.image("logo.png")
 
 opcion = st.sidebar.radio(
     "Navegación",
@@ -51,25 +71,33 @@ if opcion == "Registrar Atención":
         if not clienta or not servicio or monto <= 0:
             st.error("Por favor completa todos los campos con un monto válido.")
         else:
+            df_existing = cargar_atenciones()
+            nuevo_id = 1 if df_existing.empty else int(df_existing["id"].max()) + 1
             fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            with obtener_conexion() as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "INSERT INTO atenciones (fecha, clienta, servicio, monto) VALUES (?, ?, ?, ?)",
-                    (fecha_actual, clienta, servicio, monto)
-                )
-                conn.commit()
-            st.success(f"¡Atención guardada correctamente para {clienta} por ${monto:,.0f}!")
+            
+            nuevo_registro = pd.DataFrame([{
+                "id": nuevo_id,
+                "fecha": fecha_actual,
+                "clienta": clienta,
+                "servicio": servicio,
+                "monto": monto
+            }])
+            
+            df_updated = pd.concat([df_existing, nuevo_registro], ignore_index=True)
+            conn.update(worksheet="atenciones", data=df_updated)
+            st.success(f"¡Atención guardada en la nube para {clienta} por ${monto:,.0f}!")
 
-# --- OPCIÓN 2: HISTORIAL E INGRESOS (CON EDICIÓN Y ELIMINACIÓN) ---
+# --- OPCIÓN 2: HISTORIAL E INGRESOS ---
 elif opcion == "Historial e Ingresos":
     st.header("📊 Historial de Ingresos")
     
-    with obtener_conexion() as conn:
-        df = pd.read_sql_query("SELECT id, fecha, clienta, servicio, monto FROM atenciones ORDER BY id DESC", conn)
+    df = cargar_atenciones()
 
     if not df.empty:
-        # Calcular Totales
+        df["monto"] = pd.to_numeric(df["monto"], errors="coerce").fillna(0)
+        df["fecha"] = df["fecha"].astype(str)
+        df = df.sort_values(by="id", ascending=False)
+
         hoy_str = datetime.now().strftime("%Y-%m-%d")
         mes_str = datetime.now().strftime("%Y-%m")
 
@@ -77,7 +105,6 @@ elif opcion == "Historial e Ingresos":
         total_mes = df[df['fecha'].str.startswith(mes_str)]['monto'].sum()
         total_acumulado = df['monto'].sum()
 
-        # Métricas principales
         m1, m2, m3 = st.columns(3)
         m1.metric("Ingresos Hoy", f"${total_hoy:,.0f}")
         m2.metric("Ingresos Este Mes", f"${total_mes:,.0f}")
@@ -86,59 +113,38 @@ elif opcion == "Historial e Ingresos":
         st.subheader("Tabla de Registros")
         st.dataframe(df, use_container_width=True)
 
-        excel_data = df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📥 Descargar Reporte en CSV / Excel",
-            data=excel_data,
-            file_name=f"Reporte_KellyNails_{hoy_str}.csv",
-            mime="text/csv"
-        )
-
         st.markdown("---")
         st.subheader("🛠️ Administrar / Eliminar Registros")
         
         col_del, col_edit = st.columns(2)
 
-        # Panel de Eliminación
         with col_del:
             st.markdown("##### ❌ Eliminar Registro Error")
             id_eliminar = st.number_input("ID a Eliminar:", min_value=1, step=1, key="del_id")
             if st.button("🗑️ Borrar Servicio", use_container_width=True):
-                with obtener_conexion() as conn:
-                    cursor = conn.cursor()
-                    cursor.execute("DELETE FROM atenciones WHERE id = ?", (id_eliminar,))
-                    conn.commit()
-                st.success(f"Registro ID {id_eliminar} eliminado.")
+                df_filtrado = df[df["id"] != id_eliminar]
+                conn.update(worksheet="atenciones", data=df_filtrado)
+                st.success(f"Registro ID {id_eliminar} eliminado permanentemente.")
                 st.rerun()
 
-        # Panel de Edición Rápida
         with col_edit:
             st.markdown("##### ✏️ Editar Registro")
             id_editar = st.number_input("ID a Modificar:", min_value=1, step=1, key="edit_id")
-            
-            with obtener_conexion() as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT clienta, servicio, monto FROM atenciones WHERE id = ?", (id_editar,))
-                row_edit = cursor.fetchone()
+            row_edit = df[df["id"] == id_editar]
 
-            if row_edit:
-                c_edit = st.text_input("Clienta:", value=row_edit[0])
-                s_edit = st.text_input("Servicio:", value=row_edit[1])
-                m_edit = st.number_input("Monto ($):", value=float(row_edit[2]), step=1000.0)
+            if not row_edit.empty:
+                r = row_edit.iloc[0]
+                c_edit = st.text_input("Clienta:", value=str(r["clienta"]))
+                s_edit = st.text_input("Servicio:", value=str(r["servicio"]))
+                m_edit = st.number_input("Monto ($):", value=float(r["monto"]), step=1000.0)
 
                 if st.button("💾 Actualizar Registro", use_container_width=True):
-                    with obtener_conexion() as conn:
-                        cursor = conn.cursor()
-                        cursor.execute(
-                            "UPDATE atenciones SET clienta = ?, servicio = ?, monto = ? WHERE id = ?",
-                            (c_edit, s_edit, m_edit, id_editar)
-                        )
-                        conn.commit()
+                    df.loc[df["id"] == id_editar, ["clienta", "servicio", "monto"]] = [c_edit, s_edit, m_edit]
+                    conn.update(worksheet="atenciones", data=df)
                     st.success(f"Registro ID {id_editar} actualizado.")
                     st.rerun()
             else:
                 st.info("Ingresa un ID válido para editar.")
-
     else:
         st.info("Aún no hay atenciones registradas.")
 
@@ -146,17 +152,17 @@ elif opcion == "Historial e Ingresos":
 elif opcion == "Deudas y Balance General":
     st.header("⚖️ Control de Deudas y Balance General")
     
-    with obtener_conexion() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT SUM(monto) FROM atenciones")
-        total_ingresos = cursor.fetchone()[0] or 0.0
+    df_atenciones = cargar_atenciones()
+    total_ingresos = pd.to_numeric(df_atenciones["monto"], errors="coerce").sum() if not df_atenciones.empty else 0.0
 
-        df_deudas = pd.read_sql_query(
-            "SELECT id, acreedor, monto_total, cuotas_totales, cuotas_pagadas, valor_cuota, estado FROM deudas", 
-            conn
-        )
+    df_deudas = cargar_deudas()
 
     if not df_deudas.empty:
+        df_deudas["monto_total"] = pd.to_numeric(df_deudas["monto_total"], errors="coerce").fillna(0)
+        df_deudas["cuotas_totales"] = pd.to_numeric(df_deudas["cuotas_totales"], errors="coerce").fillna(1)
+        df_deudas["cuotas_pagadas"] = pd.to_numeric(df_deudas["cuotas_pagadas"], errors="coerce").fillna(0)
+        df_deudas["valor_cuota"] = pd.to_numeric(df_deudas["valor_cuota"], errors="coerce").fillna(0)
+        
         df_deudas['monto_pagado'] = df_deudas['cuotas_pagadas'] * df_deudas['valor_cuota']
         df_deudas['saldo_pendiente'] = df_deudas['monto_total'] - df_deudas['monto_pagado']
         total_deuda_pendiente = df_deudas[df_deudas['estado'] == 'PENDIENTE']['saldo_pendiente'].sum()
@@ -190,14 +196,19 @@ elif opcion == "Deudas y Balance General":
             if not acreedor or monto_deuda <= 0:
                 st.error("Completa los datos de la deuda correctamente.")
             else:
+                nuevo_id = 1 if df_deudas.empty else int(df_deudas["id"].max()) + 1
                 valor_cuota = monto_deuda / cuotas
-                with obtener_conexion() as conn:
-                    cursor = conn.cursor()
-                    cursor.execute(
-                        "INSERT INTO deudas (acreedor, monto_total, cuotas_totales, cuotas_pagadas, valor_cuota, estado) VALUES (?, ?, ?, 0, ?, 'PENDIENTE')",
-                        (acreedor, monto_deuda, cuotas, valor_cuota)
-                    )
-                    conn.commit()
+                nueva_deuda = pd.DataFrame([{
+                    "id": nuevo_id,
+                    "acreedor": acreedor,
+                    "monto_total": monto_deuda,
+                    "cuotas_totales": cuotas,
+                    "cuotas_pagadas": 0,
+                    "valor_cuota": valor_cuota,
+                    "estado": "PENDIENTE"
+                }])
+                df_updated_deudas = pd.concat([df_deudas, nueva_deuda], ignore_index=True)
+                conn.update(worksheet="deudas", data=df_updated_deudas)
                 st.success(f"Deuda guardada para {acreedor}.")
                 st.rerun()
 
@@ -207,27 +218,22 @@ elif opcion == "Deudas y Balance General":
             pagar_c = st.form_submit_button("💳 Pagar 1 Cuota", use_container_width=True)
 
         if pagar_c:
-            with obtener_conexion() as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT cuotas_totales, cuotas_pagadas FROM deudas WHERE id = ?", (id_deuda,))
-                row = cursor.fetchone()
+            if not df_deudas.empty and id_deuda in df_deudas["id"].values:
+                row_idx = df_deudas[df_deudas["id"] == id_deuda].index[0]
+                c_tot = df_deudas.loc[row_idx, "cuotas_totales"]
+                c_pag = df_deudas.loc[row_idx, "cuotas_pagadas"]
 
-                if not row:
-                    st.error("No existe una deuda con ese ID.")
+                if c_pag >= c_tot:
+                    st.info("Esta deuda ya está cancelada en su totalidad.")
                 else:
-                    c_tot, c_pag = row
-                    if c_pag >= c_tot:
-                        st.info("Esta deuda ya está cancelada en su totalidad.")
-                    else:
-                        nuevas_pag = c_pag + 1
-                        estado = "PAGADA" if nuevas_pag == c_tot else "PENDIENTE"
-                        cursor.execute(
-                            "UPDATE deudas SET cuotas_pagadas = ?, estado = ? WHERE id = ?",
-                            (nuevas_pag, estado, id_deuda)
-                        )
-                        conn.commit()
-                        st.success(f"¡Cuota {nuevas_pag}/{c_tot} registrada con éxito!")
-                        st.rerun()
+                    nuevas_pag = c_pag + 1
+                    estado = "PAGADA" if nuevas_pag == c_tot else "PENDIENTE"
+                    df_deudas.loc[row_idx, ["cuotas_pagadas", "estado"]] = [nuevas_pag, estado]
+                    conn.update(worksheet="deudas", data=df_deudas)
+                    st.success(f"¡Cuota {nuevas_pag}/{c_tot} registrada con éxito!")
+                    st.rerun()
+            else:
+                st.error("No existe una deuda con ese ID.")
 
     with col_tabla:
         st.subheader("Listado de Deudas")
