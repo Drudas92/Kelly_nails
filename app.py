@@ -15,8 +15,8 @@ inicializar_bd()
 # Mostrar Logo y Título
 col_logo, col_titulo = st.columns([1, 5])
 with col_logo:
-    if os.path.exists("logo.png"):
-        st.image("logo.png", width=100)
+    if os.path.exists("logo.PNG"):
+        st.image("logo.PNG", width=100)
     else:
         st.write("💅")
 with col_titulo:
@@ -25,8 +25,8 @@ with col_titulo:
 st.markdown("---")
 
 # Menú lateral seguro
-if os.path.exists("logo.png"):
-    st.sidebar.image("logo.png")
+if os.path.exists("logo.PNG"):
+    st.sidebar.image("logo.PNG")
 
 opcion = st.sidebar.radio(
     "Navegación",
