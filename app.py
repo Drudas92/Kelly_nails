@@ -6,8 +6,14 @@ st.markdown(
     .stApp {
         background-color: #000000;
     }
+    
     /* Fondo de la barra lateral */
     [data-testid="stSidebar"] {
+        background-color: #000000;
+    }
+    
+    /* Fondo de la barra superior (cabecera) */
+    header[data-testid="stHeader"] {
         background-color: #000000;
     }
     </style>
