@@ -1,4 +1,14 @@
 import streamlit as st
+st.markdown(
+    """
+    <style>
+    [data-testid="stSidebar"] {
+        background-color: #000000;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 import pandas as pd
 from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
