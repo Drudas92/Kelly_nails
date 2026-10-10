@@ -2,6 +2,11 @@ import streamlit as st
 st.markdown(
     """
     <style>
+    /* Fondo del contenido principal */
+    .stApp {
+        background-color: #000000;
+    }
+    /* Fondo de la barra lateral */
     [data-testid="stSidebar"] {
         background-color: #000000;
     }
