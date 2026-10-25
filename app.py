@@ -310,9 +310,20 @@ elif opcion == "Deudas y Balance General":
                     nuevas_pag = c_pag + 1
                     estado = "PAGADA" if (c_tot != 999 and nuevas_pag == c_tot) else "PENDIENTE"
                     
-                    df_deudas.loc[row_idx, ["cuotas_pagadas", "estado"]] = [nuevas_pag, estado]
+                    df_deudas.loc[row_idx, "cuotas_pagadas"] = nuevas_pag
+                    df_deudas.loc[row_idx, "estado"] = estado
+                    
+                    # Recalcular monto pagado y saldo pendiente antes de guardar en Google Sheets
+                    v_cuota = df_deudas.loc[row_idx, "valor_cuota"]
+                    m_total = df_deudas.loc[row_idx, "monto_total"]
+                    
+                    if "monto_pagado" in df_deudas.columns:
+                        df_deudas.loc[row_idx, "monto_pagado"] = nuevas_pag * v_cuota
+                    if "saldo_pendiente" in df_deudas.columns:
+                        df_deudas.loc[row_idx, "saldo_pendiente"] = m_total - (nuevas_pag * v_cuota)
+
                     conn.update(worksheet="deudas", data=df_deudas)
-                    st.success(f"¡Pago de cuota/servicio registrado con éxito!")
+                    st.success(f"¡Pago registrado! Ahora llevas {int(nuevas_pag)} de {int(c_tot) if c_tot != 999 else 'Recurrente'} cuotas pagadas.")
                     st.rerun()
             else:
                 st.error("No existe un registro con ese ID.")
