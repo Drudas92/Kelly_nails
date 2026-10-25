@@ -131,18 +131,28 @@ elif opcion == "Historial e Ingresos":
         hoy_str = datetime.now().strftime("%Y-%m-%d")
         mes_str = datetime.now().strftime("%Y-%m")
 
+        # Filtrar únicamente los registros correspondientes al mes y año actual
+        df_mes_actual = df[df['fecha'].str.startswith(mes_str)]
+
         total_hoy = df[df['fecha'].str.startswith(hoy_str)]['monto'].sum()
-        total_mes = df[df['fecha'].str.startswith(mes_str)]['monto'].sum()
+        total_mes = df_mes_actual['monto'].sum()
         total_acumulado = df['monto'].sum()
 
         m1, m2, m3 = st.columns(3)
         m1.metric("Ingresos Hoy", formato_cop(total_hoy))
         m2.metric("Ingresos Este Mes", formato_cop(total_mes))
-        m3.metric("Total Acumulado", formato_cop(total_acumulado))
+        m3.metric("Total Acumulado (Histórico)", formato_cop(total_acumulado))
 
         st.subheader("Tabla de Registros")
         
-        df_mostrar = df.copy()
+        # Checkbox para alternar entre la vista del mes actual o el historial completo
+        ver_todo = st.checkbox("Mostrar historial completo de meses anteriores", value=False)
+        
+        if ver_todo:
+            df_mostrar = df.copy()
+        else:
+            df_mostrar = df_mes_actual.copy()
+
         df_mostrar["monto"] = df_mostrar["monto"].apply(formato_cop)
         st.dataframe(df_mostrar, use_container_width=True)
 
@@ -187,7 +197,7 @@ elif opcion == "Deudas y Balance General":
     
     df_atenciones = cargar_atenciones()
     
-    # Calcular ingresos de este mes
+    # Calcular ingresos del mes actual
     if not df_atenciones.empty:
         df_atenciones["monto"] = pd.to_numeric(df_atenciones["monto"], errors="coerce").fillna(0)
         df_atenciones["fecha"] = df_atenciones["fecha"].astype(str)
