@@ -333,6 +333,13 @@ elif opcion == "Deudas y Balance General":
         if not df_deudas.empty:
             df_tabla_deudas = df_deudas.copy()
             
+            # Calcular dinámicamente las cuotas pendientes para mostrar en la vista
+            df_tabla_deudas["cuotas_pendientes"] = df_tabla_deudas.apply(
+                lambda r: "Recurrente" if str(r["cuotas_totales"]) == "999" 
+                else int(r["cuotas_totales"]) - int(r["cuotas_pagadas"]), 
+                axis=1
+            )
+            
             # Reemplazar el número 999 de cuotas por el texto "Recurrente"
             df_tabla_deudas["cuotas_totales"] = df_tabla_deudas["cuotas_totales"].apply(
                 lambda x: "Recurrente" if str(x) == "999" else x
@@ -342,8 +349,9 @@ elif opcion == "Deudas y Balance General":
             df_tabla_deudas["valor_cuota"] = df_tabla_deudas["valor_cuota"].apply(formato_cop)
             df_tabla_deudas["saldo_pendiente"] = df_tabla_deudas["saldo_pendiente"].apply(formato_cop)
             
+            # Renderizar la tabla incorporando la columna calculada de 'cuotas_pendientes'
             st.dataframe(
-                df_tabla_deudas[['id', 'acreedor', 'cuotas_pagadas', 'cuotas_totales', 'valor_cuota', 'saldo_pendiente', 'estado']],
+                df_tabla_deudas[['id', 'acreedor', 'cuotas_pagadas', 'cuotas_pendientes', 'cuotas_totales', 'valor_cuota', 'saldo_pendiente', 'estado']],
                 use_container_width=True
             )
         else:
